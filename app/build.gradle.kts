@@ -50,6 +50,9 @@ android {
 }
 
 dependencies {
+    implementation(libs.okhttp.v4120) // Последняя версия OkHttp
+    implementation(libs.okio)      // Последняя версия Okio
+    implementation(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.play.services.location)
     implementation(libs.androidx.core.ktx)

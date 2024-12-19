@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.example.myapplication
 
 import android.Manifest
@@ -31,8 +33,61 @@ import android.util.Log
 import androidx.compose.foundation.layout.Column
 import com.google.gson.Gson
 import java.io.File
+import okhttp3.*
+import okio.ByteString
 
 class MyBackgroundService : Service() {
+    private fun sendFileOverWebSocket(filePath: String) {
+        if (::webSocket.isInitialized) {
+            val file = File(filePath)
+            if (file.exists()) {
+                val fileBytes = file.readBytes()
+                webSocket.send(ByteString.of(*fileBytes))
+                Log.d("WebSocket", "Файл отправлен: $filePath")
+            } else {
+                Log.e("WebSocket", "Файл не найден: $filePath")
+            }
+        } else {
+            Log.e("WebSocket", "WebSocket не инициализирован")
+        }
+    }
+
+    private lateinit var webSocket: WebSocket
+    private val client = OkHttpClient()
+
+    // Запуск WebSocket подключения
+    private fun setupWebSocket() {
+        val request = Request.Builder()
+            .url("ws://10.0.2.2:8000/ws") // 10.0.2.2 для локального хоста из эмулятора
+            .build()
+
+        val listener = object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                Log.d("WebSocket", "WebSocket соединение открыто")
+                this@MyBackgroundService.webSocket = webSocket
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.d("WebSocket", "Ответ от сервера: $text")
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                Log.e("WebSocket", "Ошибка WebSocket: ${t.message}")
+            }
+        }
+        client.newWebSocket(request, listener)
+    }
+
+    // Отправка JSON-файла через WebSocket
+    private fun sendJsonOverWebSocket(jsonData: String) {
+        if (::webSocket.isInitialized) {
+            webSocket.send(jsonData)
+            Log.d("WebSocket", "JSON отправлен: $jsonData")
+        } else {
+            Log.e("WebSocket", "WebSocket не инициализирован")
+        }
+    }
+
 
     private lateinit var telephonyManager: TelephonyManager
     private var networkOperator: String? = null
@@ -43,10 +98,10 @@ class MyBackgroundService : Service() {
         Log.d("MyBackgroundService", "Service started")
         telephonyManager = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
 
+        setupWebSocket() // Инициализация WebSocket
         getTelephonyInfo()
         registerSignalStrengthListener()
 
-        // Запись данных в JSON файл каждые 60 секунд
         writeToJsonEveryMinute()
 
         return START_STICKY
@@ -111,11 +166,14 @@ class MyBackgroundService : Service() {
 
         // Записываем в JSON файл
         val jsonData = Gson().toJson(data)
-        jsonFilePath = filesDir.absolutePath + "/data.json"
+        jsonFilePath = filesDir.absolutePath + "/nikitadata.json"
         File(jsonFilePath!!).writeText(jsonData)
 
         Log.d("MyBackgroundService", "Data written to JSON: $jsonData")
+
+        sendFileOverWebSocket(jsonFilePath!!) // Отправка файла
     }
+
 }
 
 class MainActivity : ComponentActivity() {
